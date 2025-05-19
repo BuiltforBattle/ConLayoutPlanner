@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cosplay World Layout Planner</title>
+  <style>
+    body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+    #sidebar { width: 250px; padding: 20px; background: #f4f4f4; border-right: 1px solid #ccc; overflow-y: auto; }
+    #grid-container { flex: 1; position: relative; background: #fff; overflow: auto; padding: 40px; box-sizing: border-box; }
+    #grid-wrapper { display: inline-block; border: 4px solid #000; padding: 10px; background: #fdfdfd; }
+    #grid { position: relative; display: grid; }
+    .cell { border: .15px solid #ddd; box-sizing: border-box; }
+    .booth { position: absolute; border: 2px solid #333; color: #000; font-size: 10px; display: flex; justify-content: center; align-items: center; overflow: hidden; cursor: grab; transform-origin: top left; }
+    .Vendor { background: rgba(0, 128, 255, 0.5); }
+    .Artist { background: rgba(0, 255, 128, 0.5); }
+    .Guest { background: rgba(255, 128, 0, 0.5); }
+    .Stage { background: rgba(255, 0, 128, 0.5); }
+    label, input, select, button { display: block; margin-bottom: 10px; width: 100%; }
+    #boothList { margin-top: 20px; font-size: 12px; }
+    #boothList div { margin-bottom: 4px; }
+
+    .booth.selected {
+      outline: 3px solid red;
+      z-index: 999;
+    }
+
+  </style>
+</head>
+<body>
+  <header style="background:#222;color:#fff;text-align:center;padding:12px 0;font-size:1.4em;font-weight:bold;">Convention Layout Planner</header>
+  <main style="flex: 1; display: flex; overflow: hidden;">
+  <div id="sidebar">
+    <label>Floor Space Size (ft):</label>
+    <label>Width (ft): <input type="number" id="inputWidth" value="2"></label>
+    <label>Length (ft): <input type="number" id="inputLength" value="2"></label>
+    <button onclick="generateGrid()">Create Grid</button>
+
+    <hr>
+    <label>Custom Space Size (ft):</label>
+    <input type="number" id="customWidth" placeholder="Width (ft)" min="2" step="2">
+    <input type="number" id="customHeight" placeholder="Height (ft)" min="2" step="2">
+    <div style="margin-bottom: 10px;">
+  <strong style="font-size: 12px;">Quick Sizes:</strong><br>
+  <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+    <button type="button" onclick="setBoothSize(8, 8)" style="flex: 1 1 30%; font-size: 12px; padding: 4px;">8x8</button>
+    <button type="button" onclick="setBoothSize(10, 10)" style="flex: 1 1 30%; font-size: 12px; padding: 4px;">10x10</button>
+    <button type="button" onclick="setBoothSize(10, 20)" style="flex: 1 1 30%; font-size: 12px; padding: 4px;">10x20</button>
+  </div>
+</div>
+    <label>Booth Type:
+      <select id="boothType">
+        <option value="Vendor">Vendor</option>
+        <option value="Artist">Artist</option>
+        <option value="Guest">Guest</option>
+        <option value="Stage">Stage</option>
+        <option value="Food">Food</option>
+        <option value="Photo Op">Photo Op</option>
+      </select>
+    </label>
+    <label>Label: <input type="text" id="boothLabel" placeholder="e.g. Vendor A1"></label>
+    <button onclick="enablePlacement(true)">Place Space</button>
+    <div id="placementNotice" style="color: green; font-size: 12px; display: none; margin-bottom: 10px;">
+      ✅ Click on the grid to place your booth.
+    </div>
+    <div style="display: flex; justify-content: space-between; gap: 5px; margin-bottom: 10px;">
+  <button onclick="rotateSelectedBooth()" title="Rotate Booth" style="padding: 4px 6px; font-size: 20px; width: 33%;">🔄</button>
+  <button onclick="duplicateSelectedBooth()" title="Duplicate Booth" style="padding: 4px 6px; font-size: 20px; width: 33%;">📄</button>
+  <button onclick="deleteSelectedBooth()" title="Delete Booth" style="padding: 4px 6px; font-size: 20px; width: 33%;">🗑️</button>
+</div>
+    <div style="display: flex; justify-content: space-between; gap: 5px;">
+  <button onclick="saveLayout()" title="Save Layout" style="padding: 4px 6px; font-size: 20px; width: 33%;">💾</button>
+  <button onclick="loadLayout()" title="Load Layout" style="padding: 4px 6px; font-size: 20px; width: 33%;">📂</button>
+  <button onclick="exportToPDF()" title="Export as PDF" style="padding: 4px 6px; font-size: 20px; width: 33%;">📄</button>
+</div>
+    <hr>
+    <label>Zoom:
+      <input type="range" id="zoomSlider" min="0.5" max="2" step="0.1" value="1" onchange="updateZoom()">
+    </label>
+    <label>Grid Opacity:
+      <input type="range" id="gridOpacity" min="0" max=".5" step="0.1" value=".5" onchange="updateGridOpacity()">
+    </label>
+    <hr>
+    <div id="boothList"></div>
+    <label for="searchBooths">Search Booths:</label>
+    <input type="text" id="searchBooths" placeholder="Type to search..." oninput="filterBoothList()" style="margin-bottom: 10px;">
+    <button onclick="exportBoothListToCSV()" title="Export Booth List CSV" style="padding: 4px 6px; font-size: 14px; margin-top: 10px;">⬇ Export Booth List CSV</button>
+  </div>
+
+  <div id="grid-container">
+    <div id="grid-wrapper">
+      <div id="grid"></div>
+    </div>
+  </div>
+
+  <script>
+    const cellSizeFt = 2;
+    const cellPx = 20;
+    let isPlacing = false;
+    let selectedBooth = null;
+    let boothCounter = 0;
+
+    function generateGrid() {
+      const widthFt = parseInt(document.getElementById('inputWidth').value);
+      const lengthFt = parseInt(document.getElementById('inputLength').value);
+      const cols = Math.floor(widthFt / cellSizeFt);
+      const rows = Math.floor(lengthFt / cellSizeFt);
+
+      const grid = document.getElementById('grid');
+      grid.innerHTML = '';
+      grid.style.gridTemplateColumns = `repeat(${cols}, ${cellPx}px)`;
+      grid.style.gridTemplateRows = `repeat(${rows}, ${cellPx}px)`;
+      grid.style.width = `${cols * cellPx}px`;
+      grid.style.height = `${rows * cellPx}px`;
+
+      for (let i = 0; i < rows * cols; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.index = i;
+        grid.appendChild(cell);
+      }
+    }
+
+    function enablePlacement(isCustom = false) {
+      isPlacing = true;
+      document.getElementById('placementNotice').style.display = 'block';
+      const grid = document.getElementById('grid');
+      const type = document.getElementById('boothType').value;
+      const label = document.getElementById('boothLabel').value;
+      let w = 5, h = 5;
+
+      if (isCustom) {
+        w = parseInt(document.getElementById('customWidth').value) / cellSizeFt;
+        h = parseInt(document.getElementById('customHeight').value) / cellSizeFt;
+      }
+
+      grid.onclick = function(e) {
+        if (!isPlacing || !e.target.classList.contains('cell')) return;
+        document.getElementById('placementNotice').style.display = 'none';
+        const rect = grid.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const left = Math.round(x / cellPx) * cellPx;
+        const top = Math.round(y / cellPx) * cellPx;
+
+        const booth = document.createElement('div');
+        booth.className = `booth ${type}`;
+        booth.style.left = `${left}px`;
+        booth.style.top = `${top}px`;
+        booth.style.width = `${w * cellPx}px`;
+        booth.style.height = `${h * cellPx}px`;
+        booth.textContent = label || `${w * cellSizeFt}x${h * cellSizeFt}`;
+        booth.setAttribute('tabindex', 0);
+        booth.dataset.rotation = 0;
+        booth.dataset.label = label;
+        booth.dataset.type = type;
+        booth.dataset.index = ++boothCounter;
+
+        booth.addEventListener('click', function(ev) {
+          document.querySelectorAll('.booth.selected').forEach(b => b.classList.remove('selected'));
+          booth.classList.add('selected');
+          selectedBooth = booth;
+          ev.stopPropagation();
+        });
+
+        booth.addEventListener('mousedown', function(ev) {
+          const offsetX = ev.offsetX;
+          const offsetY = ev.offsetY;
+
+          function onMouseMove(moveEvent) {
+            const rect = grid.getBoundingClientRect();
+            const x = moveEvent.clientX - rect.left - offsetX;
+            const y = moveEvent.clientY - rect.top - offsetY;
+            const snappedLeft = Math.round(x / cellPx) * cellPx;
+            const snappedTop = Math.round(y / cellPx) * cellPx;
+
+            const boothWidth = parseInt(booth.style.width);
+            const boothHeight = parseInt(booth.style.height);
+            const gridWidth = grid.offsetWidth;
+            const gridHeight = grid.offsetHeight;
+
+            // Check if it's within grid bounds
+            const withinBounds = snappedLeft >= 0 && snappedTop >= 0 &&
+                                 snappedLeft + boothWidth <= gridWidth &&
+                                 snappedTop + boothHeight <= gridHeight;
+
+            // Check for collision with other booths
+            const otherBooths = Array.from(document.querySelectorAll('.booth')).filter(b => b !== booth);
+            const overlapping = otherBooths.some(b => {
+            const bx = parseInt(b.style.left);
+            const by = parseInt(b.style.top);
+            const bw = parseInt(b.style.width);
+            const bh = parseInt(b.style.height);
+            return snappedLeft < bx + bw && snappedLeft + boothWidth > bx &&
+                   snappedTop < by + bh && snappedTop + boothHeight > by;
+            });
+
+            if (withinBounds && !overlapping) {
+              booth.style.left = `${snappedLeft}px`;
+              booth.style.top = `${snappedTop}px`;
+            }
+          }
+
+          function onMouseUp() {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+          }
+
+          document.addEventListener('mousemove', onMouseMove);
+          document.addEventListener('mouseup', onMouseUp);
+        });
+
+        grid.appendChild(booth);
+        updateBoothList();
+        isPlacing = false;
+      }
+    }
+
+    function setBoothSize(width, height) {
+      document.getElementById('customWidth').value = width;
+      document.getElementById('customHeight').value = height;
+    }
+
+    function rotateSelectedBooth() {
+      if (selectedBooth) {
+        const currentRotation = parseInt(selectedBooth.dataset.rotation) || 0;
+        const newRotation = (currentRotation + 90) % 360;
+        selectedBooth.style.transform = `rotate(${newRotation}deg)`;
+        selectedBooth.dataset.rotation = newRotation;
+      }
+    }
+
+    function deleteSelectedBooth() {
+      if (selectedBooth) {
+        selectedBooth.remove();
+        selectedBooth = null;
+        updateBoothList();
+      }
+    }
+
+    function updateBoothList() {
+      const boothList = document.getElementById('boothList');
+      const search = document.getElementById('searchBooths')?.value.toLowerCase() || '';
+      boothList.innerHTML = '<strong>Booth List:</strong>';
+
+      const booths = Array.from(document.querySelectorAll('.booth'));
+
+      // Group booths by type
+      const groups = {};
+      booths.forEach(booth => {
+        const type = booth.dataset.type || 'Other';
+        if (!groups[type]) groups[type] = [];
+        groups[type].push(booth);
+      });
+
+      // Sort groups alphabetically
+      Object.keys(groups).sort().forEach(type => {
+        const matchingBooths = groups[type].filter(booth => {
+          const label = booth.dataset.label?.toLowerCase() || booth.textContent.toLowerCase();
+          return label.includes(search) || type.toLowerCase().includes(search);
+        });
+
+        if (matchingBooths.length > 0) {
+          boothList.innerHTML += `<div style="margin-top: 8px; font-weight: bold;">${type}</div>`;
+          matchingBooths.forEach(booth => {
+            const id = booth.dataset.index;
+            const label = booth.dataset.label || booth.textContent;
+            boothList.innerHTML += `
+              <div style="margin-left: 10px; display: flex; align-items: center; justify-content: space-between;">
+                <span style="cursor: pointer;" onclick="highlightBooth(${id})">#${id}: ${label}</span>
+                <button onclick="editLabel(${id})" title="Rename Booth"
+                  style="font-size: 16px; width: 24px; height: 24px; padding: 0; line-height: 1; margin-left: 5px; text-align: center;">✏️</button>
+              </div>`;
+          });
+        }
+      });
+    }
+
+    function highlightBooth(index) {
+      const booth = Array.from(document.querySelectorAll('.booth')).find(b => b.dataset.index == index);
+      if (!booth) return;
+
+      // Flash the booth with a yellow outline briefly
+      booth.style.outline = '3px solid gold';
+      booth.style.zIndex = 1000;
+
+      setTimeout(() => {
+        booth.style.outline = '';
+        booth.style.zIndex = '';
+      }, 1200);
+    }
+
+    function filterBoothList() {
+      updateBoothList(); // will respect the live search filter
+    }
+
+    function editLabel(index) {
+      const booth = Array.from(document.querySelectorAll('.booth')).find(b => b.dataset.index == index);
+      if (!booth) return;
+
+      const newLabel = prompt("Enter a new label:", booth.dataset.label || booth.textContent);
+      if (newLabel !== null && newLabel.trim() !== "") {
+        booth.dataset.label = newLabel.trim();
+        booth.textContent = newLabel.trim();
+        updateBoothList();
+      }
+    }
+
+
+    function updateZoom() {
+      const scale = parseFloat(document.getElementById('zoomSlider').value);
+      document.getElementById('grid-wrapper').style.transform = `scale(${scale})`;
+      document.getElementById('grid-wrapper').style.transformOrigin = 'top left';
+    }
+
+    function updateGridOpacity() {
+      const value = document.getElementById('gridOpacity').value;
+      const cells = document.querySelectorAll('.cell');
+      cells.forEach(cell => {
+        cell.style.borderColor = `rgba(0, 0, 0, ${value})`;
+      });
+    }
+
+    function saveLayout() {
+      const booths = Array.from(document.querySelectorAll('.booth')).map(booth => ({
+        left: booth.style.left,
+        top: booth.style.top,
+        width: booth.style.width,
+        height: booth.style.height,
+        rotation: booth.dataset.rotation || 0,
+        label: booth.dataset.label || '',
+        type: booth.dataset.type || '',
+        index: booth.dataset.index || ''
+      }));
+      localStorage.setItem('cosplayLayout', JSON.stringify(booths));
+      alert('Layout saved!');
+    }
+
+    function loadLayout() {
+      const saved = localStorage.getItem('cosplayLayout');
+      if (!saved) return alert('No saved layout found.');
+      const booths = JSON.parse(saved);
+
+      const grid = document.getElementById('grid');
+      grid.innerHTML = ''; // Clear current layout
+      generateGrid(); // Redraw grid
+
+      booths.forEach(data => {
+        const booth = document.createElement('div');
+        booth.className = `booth ${data.type}`;
+        booth.style.left = data.left;
+        booth.style.top = data.top;
+        booth.style.width = data.width;
+        booth.style.height = data.height;
+        booth.textContent = data.label;
+        booth.setAttribute('tabindex', 0);
+        booth.dataset.rotation = data.rotation;
+        booth.dataset.label = data.label;
+        booth.dataset.type = data.type;
+        booth.dataset.index = data.index;
+        booth.style.transform = `rotate(${data.rotation}deg)`;
+
+        booth.addEventListener('click', function(ev) {
+          document.querySelectorAll('.booth.selected').forEach(b => b.classList.remove('selected'));
+          booth.classList.add('selected');
+          selectedBooth = booth;
+          ev.stopPropagation();
+        });
+
+        booth.addEventListener('mousedown', function(ev) {
+          const offsetX = ev.offsetX;
+          const offsetY = ev.offsetY;
+
+          function onMouseMove(moveEvent) {
+            const rect = grid.getBoundingClientRect();
+            const x = moveEvent.clientX - rect.left - offsetX;
+            const y = moveEvent.clientY - rect.top - offsetY;
+            const snappedLeft = Math.round(x / cellPx) * cellPx;
+            const snappedTop = Math.round(y / cellPx) * cellPx;
+
+            const boothWidth = parseInt(booth.style.width);
+            const boothHeight = parseInt(booth.style.height);
+            const gridWidth = grid.offsetWidth;
+            const gridHeight = grid.offsetHeight;
+
+            const withinBounds = snappedLeft >= 0 && snappedTop >= 0 &&
+                                 snappedLeft + boothWidth <= gridWidth &&
+                                 snappedTop + boothHeight <= gridHeight;
+
+            const otherBooths = Array.from(document.querySelectorAll('.booth')).filter(b => b !== booth);
+            const overlapping = otherBooths.some(b => {
+              const bx = parseInt(b.style.left);
+              const by = parseInt(b.style.top);
+              const bw = parseInt(b.style.width);
+              const bh = parseInt(b.style.height);
+              return snappedLeft < bx + bw && snappedLeft + boothWidth > bx &&
+                     snappedTop < by + bh && snappedTop + boothHeight > by;
+            });
+
+            if (withinBounds && !overlapping) {
+              booth.style.left = `${snappedLeft}px`;
+              booth.style.top = `${snappedTop}px`;
+            }
+          }
+
+          function onMouseUp() {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+          }
+
+          document.addEventListener('mousemove', onMouseMove);
+          document.addEventListener('mouseup', onMouseUp);
+        });
+
+        grid.appendChild(booth);
+      });
+
+      updateBoothList();
+    }
+
+    function exportToPDF() {
+      if (!window.jspdf || !window.jspdf.jsPDF) {
+        alert("jsPDF is not loaded.");
+        return;
+      }
+
+      const jsPDF = window.jspdf.jsPDF;
+
+      html2canvas(document.getElementById('grid-wrapper')).then(canvas => {
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF({
+          orientation: 'landscape',
+          unit: 'px',
+          format: [canvas.width, canvas.height]
+        });
+
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('layout.pdf');
+      }).catch(err => {
+        console.error('html2canvas error:', err);
+        alert('Failed to export layout. See console for details.');
+      });
+    }
+
+    function exportBoothListToCSV() {
+      const booths = Array.from(document.querySelectorAll('.booth'));
+
+      const rows = [["Index", "Type", "Label", "Width (ft)", "Height (ft)", "X (ft)", "Y (ft)"]];
+
+      booths.forEach(booth => {
+        const index = booth.dataset.index;
+        const type = booth.dataset.type;
+      const label = booth.dataset.label || booth.textContent;
+
+        const widthPx = parseInt(booth.style.width);
+        const heightPx = parseInt(booth.style.height);
+        const xPx = parseInt(booth.style.left);
+        const yPx = parseInt(booth.style.top);
+
+        const widthFt = (widthPx / cellPx) * cellSizeFt;
+        const heightFt = (heightPx / cellPx) * cellSizeFt;
+        const xFt = (xPx / cellPx) * cellSizeFt;
+        const yFt = (yPx / cellPx) * cellSizeFt;
+
+        rows.push([index, type, label, widthFt, heightFt, xFt, yFt]);
+      });
+
+      const csvContent = rows.map(row => row.join(",")).join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", "booth-list.csv");
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Delete' && selectedBooth) {
+      selectedBooth.remove();
+      selectedBooth = null;
+      updateBoothList();
+    }
+  });
+
+  function duplicateSelectedBooth() {
+    if (!selectedBooth) return;
+
+    const original = selectedBooth;
+    const clone = original.cloneNode(true);
+    const grid = document.getElementById('grid');
+
+    const left = parseInt(original.style.left) + 10;
+    const top = parseInt(original.style.top) + 10;
+    clone.style.left = `${left}px`;
+    clone.style.top = `${top}px`;
+
+    clone.dataset.index = ++boothCounter;
+    clone.setAttribute('tabindex', 0);
+    clone.textContent = original.dataset.label;
+
+    clone.addEventListener('click', function(ev) {
+      document.querySelectorAll('.booth.selected').forEach(b => b.classList.remove('selected'));
+      clone.classList.add('selected');
+      selectedBooth = clone;
+      ev.stopPropagation();
+    });
+
+
+    clone.addEventListener('mousedown', function(ev) {
+      const offsetX = ev.offsetX;
+      const offsetY = ev.offsetY;
+
+    function onMouseMove(moveEvent) {
+      const rect = grid.getBoundingClientRect();
+      const x = moveEvent.clientX - rect.left - offsetX;
+      const y = moveEvent.clientY - rect.top - offsetY;
+      const snappedLeft = Math.round(x / cellPx) * cellPx;
+      const snappedTop = Math.round(y / cellPx) * cellPx;
+
+      const boothWidth = parseInt(clone.style.width);
+      const boothHeight = parseInt(clone.style.height);
+      const gridWidth = grid.offsetWidth;
+      const gridHeight = grid.offsetHeight;
+
+      const withinBounds = snappedLeft >= 0 && snappedTop >= 0 &&
+                           snappedLeft + boothWidth <= gridWidth &&
+                           snappedTop + boothHeight <= gridHeight;
+
+      const otherBooths = Array.from(document.querySelectorAll('.booth')).filter(b => b !== clone);
+      const overlapping = otherBooths.some(b => {
+        const bx = parseInt(b.style.left);
+        const by = parseInt(b.style.top);
+        const bw = parseInt(b.style.width);
+        const bh = parseInt(b.style.height);
+        return snappedLeft < bx + bw && snappedLeft + boothWidth > bx &&
+               snappedTop < by + bh && snappedTop + boothHeight > by;
+      });
+
+      if (withinBounds && !overlapping) {
+        clone.style.left = `${snappedLeft}px`;
+        clone.style.top = `${snappedTop}px`;
+      }
+    }
+
+    function onMouseUp() {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    }
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  });
+
+  grid.appendChild(clone);
+  updateBoothList();
+}
+</script>
+  </main>
+  <footer style="background:#f4f4f4;text-align:center;padding:10px;font-size:0.9em;border-top:1px solid #ccc;">
+    &copy; 2025 by <a href="https://IllionMedia.com" target="_blank" style="color:#000;text-decoration:none;font-weight:bold;">Illion Media Group</a>
+  </footer>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+</body>
+</html>
