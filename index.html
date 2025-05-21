@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Event Space Planner</title>
+  <title>Event Space Designer</title>
   <style>
     body {
   font-family: Arial, sans-serif;
@@ -38,8 +38,16 @@
     .Artist { background: rgba(0, 255, 128, 0.5); }
     .Guest { background: rgba(255, 128, 0, 0.5); }
     .Stage { background: rgba(255, 0, 128, 0.5); }
+    .Food { background: rgba(255, 230, 0, 0.5); }
+    .Photo { background: rgba(153, 102, 255, 0.5); }
+
     label, input, select, button { display: block; margin-bottom: 10px; width: 100%; }
-    
+    .booth {
+      user-select: none;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+    }
     #boothList { margin-top: 20px; font-size: 12px; }
     #boothList div { margin-bottom: 4px; }
     #boothList::-webkit-scrollbar {
@@ -49,18 +57,59 @@
       background-color: #888;
       border-radius: 3px;
     }
+    #customBoothBtn.active-custom {
+      background: #007bff;
+      color: white;
+      border: 1px solid #005bb5;
+    }
     .booth.selected {
       outline: 3px solid red;
       z-index: 999;
+      cursor: grabbing;
     }
-
+    .active-size {
+      background: #007bff;
+      color: #fff;
+      border: 1px solid #005bb5;
+    }
+    button {
+      border-radius: 4px;
+      border: 1px solid #bbb;
+      background: #fff;
+    transition: background 0.2s ease;
+    }
+    button:hover {
+      background: #f0f0f0;
+    }
+    .sidebar-heading {
+      font-size: 18px;
+      margin: 16px 0 6px;
+      border-bottom: 1px solid #ccc;
+      text-align: center;
+    }
+    #resizer {
+      width: 5px;
+      cursor: col-resize;
+      background-color: #ccc;
+      height: 100%;
+    }
+    label {
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+    body.noselect,
+    body.noselect * {
+      user-select: none;
+    }
   </style>
 </head>
 <body>
-  <header style="background:#222;color:#fff;text-align:center;padding:12px 0;font-size:1.4em;font-weight:bold;">Event Space Planner</header>
+  <header style="background:#222;color:#fff;text-align:center;padding:12px 0;font-size:1.4em;font-weight:bold;">Event Space Designer</header>
   <main style="flex: 1; display: flex; overflow: hidden;">
   <div id="sidebar">
-    <label>Floor Space Size (ft):</label>
+    <h3 class="sidebar-heading">GRID TOOLS</h3>
+    <strong style="font-size: 12px;">Floor Space Size (ft):</strong><br>
     <label>Width (ft): <input type="number" id="inputWidth" value="1"></label>
     <label>Length (ft): <input type="number" id="inputLength" value="1"></label>
     <div style="display: flex; justify-content: space-between; gap: 5px;">
@@ -68,18 +117,26 @@
       <button onclick="toggleGridOpacity()" id="gridToggleBtn">Hide Grid Lines</button>
     </div>
     <hr>
-    <label>Custom Space Size (ft):</label>
+    <h3 class="sidebar-heading">BOOTH SIZING</h3>
+    <strong style="font-size: 12px;">Custom Space Size (ft):</strong><br>
     <input type="number" id="customWidth" placeholder="Width (ft)" min="2" step="2">
     <input type="number" id="customHeight" placeholder="Height (ft)" min="2" step="2">
-    <button onclick="enablePlacement(true)" style="flex: 1 1 50%; font-size: 12px; padding: 4px;">Place Custom Booth</button>
     <div style="margin-bottom: 10px;">
   <strong style="font-size: 12px;">Quick Sizes:</strong><br>
-  <div style="display: flex; gap: 5px; flex-wrap: wrap;">
-    <button type="button" onclick="setBoothSize(8, 8)" style="flex: 1 1 25%; font-size: 12px; padding: 4px;">8x8</button>
-    <button type="button" onclick="setBoothSize(10, 10)" style="flex: 1 1 25%; font-size: 12px; padding: 4px;">10x10</button>
-    <button type="button" onclick="setBoothSize(10, 20)" style="flex: 1 1 25%; font-size: 12px; padding: 4px;">10x20</button>
-    <button type="button" onclick="setBoothSize(20, 10)" style="flex: 1 1 25%; font-size: 12px; padding: 4px;">20x10</button>
+  <div style="display: flex; gap: 5px; margin-bottom: 5px;">
+    <button type="button" class="quick-size" onclick="setBoothSize(6, 6)" style="flex: 1 1 33%; font-size: 12px; padding: 2px;">6x6</button>
+    <button type="button" class="quick-size" onclick="setBoothSize(8, 8)" style="flex: 1 1 33%; font-size: 12px; padding: 2px;">8x8</button>
+    <button type="button" class="quick-size" onclick="setBoothSize(10, 10)" style="flex: 1 1 33%; font-size: 12px; padding: 2px;">10x10</button>
   </div>
+  <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+    <button type="button" class="quick-size" onclick="setBoothSize(10, 20)" style="flex: 1 1 50%; font-size: 12px; padding: 2px;">10x20</button>
+    <button type="button" class="quick-size" onclick="setBoothSize(20, 10)" style="flex: 1 1 50%; font-size: 12px; padding: 2px;">20x10</button>
+  </div>
+  <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 10px;">
+    <input type="checkbox" id="multiPlaceToggle">
+    <label for="multiPlaceToggle" style="margin: 0;">Multi-Place Mode</label>
+  </div>
+    <button id="customBoothBtn" onclick="enablePlacement(true)" style="flex: 1 1 50%; font-size: 12px; padding: 4px;">Place Custom Booth</button>  
 </div>
     <label>Booth Type:
       <select id="boothType">
@@ -88,11 +145,12 @@
         <option value="Guest">Guest</option>
         <option value="Stage">Stage</option>
         <option value="Food">Food</option>
-        <option value="Photo Op">Photo Op</option>
+        <option value="Photo">Photo Op</option>
       </select>
     </label>
     <label>Label: <input type="text" id="boothLabel" placeholder="e.g. Vendor A1"></label>
     <hr>
+    <h3 class="sidebar-heading">LAYOUT ACTIONS</h3>
     <div style="display: flex; justify-content: space-between; gap: 5px; margin-bottom: 10px;">
       <button onclick="scrollToCenter()" title="Center View" style="padding: 4px 6px; font-size: 12px; width: 33%;">Center View</button>
       <button onclick="duplicateSelectedBooth()" title="Duplicate Booth" style="padding: 4px 6px; font-size: 20px; width: 33%;">📄</button>
@@ -112,14 +170,17 @@
       <input type="range" id="zoomSlider" min="0.5" max="2" step="0.1" value="1" onchange="updateZoom()">
     </label>
     <hr>
-    <div style="max-height: 250px; overflow-y: auto; border: 1px solid #ccc; padding: 8px; background: #fff; margin-top: 10px;">
+    <h3 class="sidebar-heading">BOOTH MANAGEMENT</h3>
+    <div id="boothCount" style="font-size: 12px; font-style: italic; margin-bottom: 4px;"></div>
+    <strong style="font-size: 12px;">Booth List:</strong>
+    <div style="max-height: 250px; overflow-y: auto; border: 1px solid #ccc; padding: 8px; background: #fff; margin-top: 4px; margin-bottom: 12px;">
       <div id="boothList"></div>
     </div>
     <label for="searchBooths">Search Booths:</label>
     <input type="text" id="searchBooths" placeholder="Type to search..." oninput="filterBoothList()" style="margin-bottom: 10px;">
     <button onclick="exportBoothListToCSV()" title="Export Booth List CSV" style="padding: 4px 6px; font-size: 14px; margin-top: 10px;">⬇ Export Booth List CSV</button>
   </div>
-
+  <div id="resizer"></div>
   <div id="grid-container">
     <div id="grid-wrapper">
       <div id="grid"></div>
@@ -200,8 +261,10 @@
       function onMouseUp() {
         document.removeEventListener('mousemove', throttledMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
+        document.body.classList.remove('noselect');
       }
 
+      document.body.classList.add('noselect');
       document.addEventListener('mousemove', throttledMouseMove);
       document.addEventListener('mouseup', onMouseUp);
     }
@@ -229,6 +292,12 @@
 
     function enablePlacement(isCustom = false) {
       isPlacing = true;
+      // Clear any active quick-size buttons
+      document.querySelectorAll('.quick-size').forEach(btn => btn.classList.remove('active-size'));
+
+      // Highlight the custom button
+      document.getElementById('customBoothBtn').classList.add('active-custom');
+
       const grid = document.getElementById('grid');
       const type = document.getElementById('boothType').value;
       const label = document.getElementById('boothLabel').value;
@@ -243,8 +312,10 @@
 
       grid.onclick = function(e) {
         if (!isPlacing || !e.target.classList.contains('cell')) return;
-        isPlacing = false;
-        
+        if (!document.getElementById('multiPlaceToggle').checked) {
+          isPlacing = false;
+        }
+
         const rect = grid.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
@@ -284,6 +355,9 @@
           const grid = document.getElementById('grid');
           attachThrottledMouseEvents(booth, offsetX, offsetY, grid);
         });
+        booth.addEventListener('dblclick', function () {
+          editLabel(booth.dataset.index);
+        });
 
         grid.appendChild(booth);
         updateBoothList();
@@ -292,12 +366,24 @@
     }
 
     function setBoothSize(width, height) {
+      document.getElementById('customBoothBtn').classList.remove('active-custom');
       document.getElementById('customWidth').value = width;
       document.getElementById('customHeight').value = height;
       boothWidth = width;
       boothHeight = height;
+
+      // ✅ Highlight the selected button
+      document.querySelectorAll('.quick-size').forEach(btn => btn.classList.remove('active-size'));
+      const buttons = document.querySelectorAll('.quick-size');
+      buttons.forEach(btn => {
+        if (btn.textContent === `${width}x${height}`) {
+          btn.classList.add('active-size');
+        }
+      });
+
       enablePlacement(true);
     }
+
 
     function deleteSelectedBooth() {
       if (selectedBooth) {
@@ -311,9 +397,29 @@
     function updateBoothList() {
       const boothList = document.getElementById('boothList');
       const search = document.getElementById('searchBooths')?.value.toLowerCase() || '';
-      boothList.innerHTML = '<strong>Booth List:</strong>';
+      boothList.innerHTML = '';
 
       const booths = Array.from(document.querySelectorAll('.booth'));
+      const countText = booths.length === 1 ? '1 booth placed' : `${booths.length} booths placed`;
+      let vendorCount = 0;
+      let artistCount = 0;
+      let guestCount = 0;
+
+      booths.forEach(booth => {
+        const type = booth.dataset.type;
+        if (type === 'Vendor') vendorCount++;
+        else if (type === 'Artist') artistCount++;
+        else if (type === 'Guest') guestCount++;
+      });
+
+      const total = vendorCount + artistCount + guestCount;
+
+      document.getElementById('boothCount').innerHTML = `
+        <strong>${total} Featured Booth${total === 1 ? '' : 's'} Placed</strong><br>
+        <span style="color:#0078d4;">Vendors:</span> ${vendorCount} &nbsp; 
+        <span style="color:#00a859;">Artists:</span> ${artistCount} &nbsp; 
+        <span style="color:#e67e22;">Guests:</span> ${guestCount}
+      `;
 
       // Group booths by type
       const groups = {};
@@ -324,6 +430,8 @@
       });
 
       // Sort groups alphabetically
+      let html = '';
+
       Object.keys(groups).sort().forEach(type => {
         const matchingBooths = groups[type].filter(booth => {
           const label = booth.dataset.label?.toLowerCase() || booth.textContent.toLowerCase();
@@ -331,19 +439,43 @@
         });
 
         if (matchingBooths.length > 0) {
-          boothList.innerHTML += `<div style="margin-top: 8px; font-weight: bold;">${type}</div>`;
+          const groupId = `group-${type.replace(/\s+/g, '-')}`;
+          html += `
+            <div class="booth-group-header" onclick="toggleBoothGroup('${groupId}')" style="margin-top: 8px; font-weight: bold; cursor: pointer;">
+              <span class="toggle-arrow" id="arrow-${groupId}">▶</span> ${type}
+            </div>
+            <div id="${groupId}" style="margin-left: 10px; display: none;">
+          `;
+
           matchingBooths.forEach(booth => {
             const id = booth.dataset.index;
             const label = booth.dataset.label || booth.textContent;
-            boothList.innerHTML += `
-              <div style="margin-left: 10px; display: flex; align-items: center; justify-content: space-between;">
+            html += `
+              <div style="display: flex; align-items: center; justify-content: space-between;">
                 <span style="cursor: pointer;" onclick="highlightBooth(${id})">#${id}: ${label}</span>
                 <button onclick="editLabel(${id})" title="Rename Booth"
                   style="font-size: 16px; width: 24px; height: 24px; padding: 0; line-height: 1; margin-left: 5px; text-align: center;">✏️</button>
               </div>`;
           });
+
+          html += `</div>`;
         }
       });
+
+      boothList.innerHTML = html;
+    }
+
+    function toggleBoothGroup(groupId) {
+      const group = document.getElementById(groupId);
+      if (!group) return;
+
+      const isVisible = group.style.display !== 'none';
+      group.style.display = isVisible ? 'none' : 'block';
+
+      const arrow = document.getElementById(`arrow-${groupId}`);
+      if (arrow) {
+        arrow.textContent = isVisible ? '▶' : '▼';
+      }
     }
 
     function highlightBooth(index) {
@@ -452,6 +584,9 @@
           attachThrottledMouseEvents(booth, offsetX, offsetY, grid);
         });
 
+        booth.addEventListener('dblclick', function () {
+          editLabel(booth.dataset.index);
+        });
 
         grid.appendChild(booth);
       });
@@ -527,9 +662,16 @@
         saveHistory();
       }
 
+      // ✅ Escape key works globally
+    if (e.key === 'Escape') {
+        isPlacing = false;
+        document.querySelectorAll('.quick-size').forEach(btn => btn.classList.remove('active-size'));
+        document.getElementById('multiPlaceToggle').checked = false;
+        document.getElementById('customBoothBtn').classList.remove('active-custom');
+      }
+
       if (selectedBooth) {
         const step = cellPx;
-
         let x = parseInt(selectedBooth.dataset.translateX || 0);
         let y = parseInt(selectedBooth.dataset.translateY || 0);
 
@@ -554,7 +696,8 @@
         selectedBooth.dataset.translateX = x;
         selectedBooth.dataset.translateY = y;
       }
-    });;
+    });
+
 
     function scrollToCenter() {
       const container = document.getElementById('grid-container');
@@ -594,13 +737,16 @@
     });
 
     clone.addEventListener('mousedown', function(ev) {
-      const boothRect = booth.getBoundingClientRect();
+      const boothRect = clone.getBoundingClientRect();
       const offsetX = (ev.clientX - boothRect.left) / currentZoom;
       const offsetY = (ev.clientY - boothRect.top) / currentZoom;
       const grid = document.getElementById('grid');
       attachThrottledMouseEvents(clone, offsetX, offsetY, grid);
     });
-
+    clone.addEventListener('dblclick', function () {
+      editLabel(clone.dataset.index);
+    });
+      
       grid.appendChild(clone);
       updateBoothList();
       saveHistory();
@@ -673,16 +819,43 @@
           attachThrottledMouseEvents(booth, offsetX, offsetY, grid);
         });
 
+        booth.addEventListener('dblclick', function () {
+          editLabel(booth.dataset.index);
+        });
+
         grid.appendChild(booth);
       });
 
       updateBoothList();
     }
     
+    const resizer = document.getElementById('resizer');
+    const sidebar = document.getElementById('sidebar');
+    const main = resizer.parentNode;
+
+    resizer.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+
+      document.addEventListener('mousemove', resizeSidebar);
+      document.addEventListener('mouseup', stopResize);
+    });
+
+    function resizeSidebar(e) {
+      const newWidth = e.clientX;
+      if (newWidth > 150 && newWidth < 600) { // optional min/max width
+        sidebar.style.width = newWidth + 'px';
+      }
+    }
+
+    function stopResize() {
+      document.removeEventListener('mousemove', resizeSidebar);
+      document.removeEventListener('mouseup', stopResize);
+    }
+
 </script>
   </main>
   <footer style="background:#f4f4f4;text-align:center;padding:10px;font-size:0.9em;border-top:1px solid #ccc;">
-    &copy; 2025 by <a href="https://IllionMedia.com" target="_blank" style="color:#000;text-decoration:none;font-weight:bold;">Illion Media Group</a>
+    &copy; 2025 by <a href="https://creativecosplays.com" target="_blank" style="color:#000;text-decoration:none;font-weight:bold;">Creative Cosplays</a>
   </footer>
   
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
