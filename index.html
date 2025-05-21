@@ -18,19 +18,27 @@
       flex: 1;
       position: relative;
       background: #fff;
-      overflow: auto;
-      padding: 0; /* ✅ Remove padding */
       box-sizing: border-box;
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
+      display: block;
+      overflow: auto;
+      position: relative;
+      padding: 0;
     }
     #grid-wrapper {
-      display: block;
+      display: inline-block;
       border: 4px solid #000;
       background: #fdfdfd;
-      margin: 20px 0; /* optional spacing */
+      margin: 20px 0;
+      padding-left: 0;
+      padding-right: 0;
+      transition: padding 0.2s ease;
     }
+
+    #grid-scroll-wrapper {
+      width: max-content;
+      height: max-content;
+    }
+
     #grid { position: relative; display: grid; }
     .cell { border: .15px solid #ddd; box-sizing: border-box; }
     .booth { position: absolute; border: 2px solid #333; color: #000; font-size: 10px; display: flex; justify-content: center; align-items: center; overflow: hidden; cursor: grab; transform-origin: top left; }
@@ -48,7 +56,7 @@
       -moz-user-select: none;
       -ms-user-select: none;
     }
-    #boothList { margin-top: 20px; font-size: 12px; }
+    #boothList { margin-top: 2px; font-size: 12px; }
     #boothList div { margin-bottom: 4px; }
     #boothList::-webkit-scrollbar {
       width: 6px;
@@ -182,10 +190,13 @@
   </div>
   <div id="resizer"></div>
   <div id="grid-container">
-    <div id="grid-wrapper">
-      <div id="grid"></div>
+    <div id="grid-scroll-wrapper">
+      <div id="grid-wrapper">
+        <div id="grid"></div>
+      </div>
     </div>
   </div>
+
 
   <script>
     const cellSizeFt = 2;
@@ -317,8 +328,8 @@
         }
 
         const rect = grid.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const x = (e.clientX - rect.left) / currentZoom;
+        const y = (e.clientY - rect.top) / currentZoom;
         const left = Math.round(x / cellPx) * cellPx;
         const top = Math.round(y / cellPx) * cellPx;
 
@@ -510,13 +521,23 @@
     }
 
     function updateZoom() {
-      currentZoom = parseFloat(document.getElementById('zoomSlider').value); // ✅ Save zoom
+      currentZoom = parseFloat(document.getElementById('zoomSlider').value);
       const wrapper = document.getElementById('grid-wrapper');
-      wrapper.style.transform = `scale(${currentZoom})`;
-      wrapper.style.transformOrigin = 'top center'; 
-    }
+      const grid = document.getElementById('grid');
+      const container = document.getElementById('grid-container');
 
-    let gridVisible = true;
+      wrapper.style.transform = `scale(${currentZoom})`;
+      wrapper.style.transformOrigin = 'top left';
+
+      // Calculate scaled width
+      const scaledWidth = grid.offsetWidth * currentZoom;
+      const containerWidth = container.clientWidth;
+
+      // Add horizontal padding to center the zoomed grid
+      const sidePadding = Math.max((containerWidth - scaledWidth) / 2, 0);
+      wrapper.style.paddingLeft = `${sidePadding}px`;
+      wrapper.style.paddingRight = `${sidePadding}px`;
+    }
 
     function toggleGridOpacity() {
       const cells = document.querySelectorAll('.cell');
