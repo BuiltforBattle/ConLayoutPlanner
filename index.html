@@ -887,8 +887,8 @@
 
         const widthPx = parseInt(booth.style.width);
         const heightPx = parseInt(booth.style.height);
-        const xPx = parseInt(booth.style.left);
-        const yPx = parseInt(booth.style.top);
+        const xPx = parseInt(booth.dataset.translateX || 0);
+        const yPx = parseInt(booth.dataset.translateY || 0);
 
         const widthFt = (widthPx / cellPx) * cellSizeFt;
         const heightFt = (heightPx / cellPx) * cellSizeFt;
@@ -919,7 +919,7 @@
       container.scrollLeft = scrollLeft;
     }
 
-   function duplicateSelectedBooth() {
+    function duplicateSelectedBooth() {
       const selectedBooths = Array.from(document.querySelectorAll('.booth.selected'));
       if (selectedBooths.length === 0) return;
 
@@ -973,7 +973,6 @@
       updateBoothList();
       saveHistory();
     }
-
 
     function saveHistory() {
       const snapshot = Array.from(document.querySelectorAll('.booth')).map(booth => ({
@@ -1133,7 +1132,6 @@
         grid.onclick = null; // exit placement mode
       };
     }
-
 
     function attachTextMoveEvents(el, offsetX, offsetY) {
       const grid = document.getElementById('grid');
