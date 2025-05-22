@@ -33,7 +33,6 @@
       padding-right: 0;
       transition: padding 0.2s ease;
     }
-
     #grid-scroll-wrapper {
       width: max-content;
       height: max-content;
@@ -109,6 +108,14 @@
     body.noselect,
     body.noselect * {
       user-select: none;
+    }
+    #selectionBox {
+      position: absolute;
+      border: 2px dashed #007bff;
+      background: rgba(0, 123, 255, 0.2);
+      display: none;
+      z-index: 9999;
+      pointer-events: none;
     }
   </style>
 </head>
@@ -191,12 +198,32 @@
   <div id="resizer"></div>
   <div id="grid-container">
     <div id="grid-scroll-wrapper">
+    <div id="selectionBox"></div>
       <div id="grid-wrapper">
         <div id="grid"></div>
       </div>
     </div>
   </div>
 
+  <div id="editModal" style="display: none; position: fixed; top: 30%; left: 50%; transform: translateX(-50%); background: #fff; padding: 16px; border: 2px solid #333; z-index: 10000; width: 280px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+    <label for="editLabel">Booth Label:</label>
+    <input type="text" id="editLabel" style="margin-bottom: 10px;">
+  
+    <label for="editType">Booth Type:</label>
+    <select id="editType" style="margin-bottom: 12px;">
+      <option value="Vendor">Vendor</option>
+      <option value="Artist">Artist</option>
+      <option value="Guest">Guest</option>
+      <option value="Stage">Stage</option>
+      <option value="Food">Food</option>
+      <option value="Photo">Photo</option>
+    </select>
+
+    <div style="display: flex; justify-content: space-between;">
+      <button onclick="saveBoothEdits()">Save</button>
+      <button onclick="closeEditModal()">Cancel</button>
+    </div>
+  </div>
 
   <script>
     const cellSizeFt = 2;
@@ -216,6 +243,8 @@
     let history = [];
     let redoStack = [];
     let currentZoom = 1;
+    let gridVisible = true;
+    let editingBooth = null;
     const originalMouseMove = (moveEvent, booth, offsetX, offsetY, grid) => {
       const rect = grid.getBoundingClientRect();
       const x = (moveEvent.clientX - rect.left) / currentZoom - offsetX;
@@ -251,6 +280,123 @@
       }
     };
 
+    let isSelecting = false;
+    let startX, startY;
+    const selectionBox = document.getElementById('selectionBox');
+    const gridWrapper = document.getElementById('grid-wrapper');
+
+    gridWrapper.addEventListener('mousedown', function(e) {
+      if (!e.shiftKey) return;
+
+      isSelecting = true;
+      const rect = gridWrapper.getBoundingClientRect();
+      startX = e.clientX - rect.left;
+      startY = e.clientY - rect.top;
+
+      selectionBox.style.left = `${startX}px`;
+      selectionBox.style.top = `${startY}px`;
+      selectionBox.style.width = '0px';
+      selectionBox.style.height = '0px';
+      selectionBox.style.display = 'block';
+    });
+
+    gridWrapper.addEventListener('mousemove', function(e) {
+      if (!isSelecting) return;
+      const rect = gridWrapper.getBoundingClientRect();
+      const currentX = e.clientX - rect.left;
+      const currentY = e.clientY - rect.top;
+
+      const x = Math.min(startX, currentX);
+      const y = Math.min(startY, currentY);
+      const w = Math.abs(currentX - startX);
+      const h = Math.abs(currentY - startY);
+
+      selectionBox.style.left = `${x}px`;
+      selectionBox.style.top = `${y}px`;
+      selectionBox.style.width = `${w}px`;
+      selectionBox.style.height = `${h}px`;
+
+      const boxRect = selectionBox.getBoundingClientRect();
+      const booths = document.querySelectorAll('.booth');
+      booths.forEach(booth => {
+        const boothRect = booth.getBoundingClientRect();
+        const intersects =
+          boxRect.left < boothRect.right &&
+          boxRect.right > boothRect.left &&
+          boxRect.top < boothRect.bottom &&
+          boxRect.bottom > boothRect.top;
+
+        if (intersects) {
+          booth.classList.add('selected');
+        }
+      });
+    });
+
+    document.addEventListener('mouseup', (e) => {
+      if (isSelecting) {
+        e.preventDefault();
+        isSelecting = false;
+        selectionBox.style.display = 'none';
+      }
+    });
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Delete' && selectedBooth) {
+        selectedBooth.remove();
+        selectedBooth = null;
+        updateBoothList();
+        saveHistory();
+      }
+
+      // ✅ Escape key works globally
+    if (e.key === 'Escape') {
+        isPlacing = false;
+        document.querySelectorAll('.quick-size').forEach(btn => btn.classList.remove('active-size'));
+        document.getElementById('multiPlaceToggle').checked = false;
+        document.getElementById('customBoothBtn').classList.remove('active-custom');
+      }
+
+      if (selectedBooth) {
+        const step = cellPx;
+        let x = parseInt(selectedBooth.dataset.translateX || 0);
+        let y = parseInt(selectedBooth.dataset.translateY || 0);
+
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          y -= step;
+        }
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          y += step;
+        }
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          x -= step;
+        }
+        if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          x += step;
+        }
+        // Ctrl+Z = Undo, Ctrl+Y = Redo
+        if (e.ctrlKey && e.key === 'z') {
+          e.preventDefault();
+          undoLayout();
+        }
+        if (e.ctrlKey && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) {
+          e.preventDefault();
+          redoLayout();
+        }
+        if (e.ctrlKey && e.key === 'a') {
+          e.preventDefault();
+          document.querySelectorAll('.booth').forEach(b => b.classList.add('selected'));
+        }
+
+        selectedBooth.style.transform = `translate(${x}px, ${y}px)`;
+        selectedBooth.dataset.translateX = x;
+        selectedBooth.dataset.translateY = y;
+      }
+    });
+    
     function throttle(callback, limit) {
       let waiting = false;
       return function () {
@@ -265,8 +411,28 @@
     }
     
     function attachThrottledMouseEvents(booth, offsetX, offsetY, grid) {
+      const selectedBooths = Array.from(document.querySelectorAll('.booth.selected'));
+
+      const boothOffsets = selectedBooths.map(b => {
+        const bx = parseInt(b.dataset.translateX || 0);
+        const by = parseInt(b.dataset.translateY || 0);
+        return { booth: b, offsetX: bx - (parseInt(booth.dataset.translateX || 0)), offsetY: by - (parseInt(booth.dataset.translateY || 0)) };
+      });
+
       const throttledMouseMove = throttle((moveEvent) => {
-        originalMouseMove(moveEvent, booth, offsetX, offsetY, grid);
+        const rect = grid.getBoundingClientRect();
+        const mouseX = (moveEvent.clientX - rect.left) / currentZoom - offsetX;
+        const mouseY = (moveEvent.clientY - rect.top) / currentZoom - offsetY;
+        const snappedX = Math.round(mouseX / cellPx) * cellPx;
+        const snappedY = Math.round(mouseY / cellPx) * cellPx;
+
+        boothOffsets.forEach(({ booth: b, offsetX, offsetY }) => {
+          const newX = snappedX + offsetX;
+          const newY = snappedY + offsetY;
+          b.style.transform = `translate(${newX}px, ${newY}px)`;
+          b.dataset.translateX = newX;
+          b.dataset.translateY = newY;
+        });
       }, 16);
 
       function onMouseUp() {
@@ -298,6 +464,8 @@
         cell.className = 'cell';
         cell.dataset.index = i;
         grid.appendChild(cell);
+
+        document.getElementById('gridToggleBtn').textContent = gridVisible ? 'Hide Grid Lines' : 'Show Grid Lines';
       }
     }
 
@@ -353,19 +521,30 @@
         booth.dataset.index = ++boothCounter;
 
         booth.addEventListener('click', function(ev) {
-          document.querySelectorAll('.booth.selected').forEach(b => b.classList.remove('selected'));
-          booth.classList.add('selected');
-          selectedBooth = booth;
+          if (ev.shiftKey) {
+            booth.classList.toggle('selected');
+          } else {
+            document.querySelectorAll('.booth.selected').forEach(b => b.classList.remove('selected'));
+            booth.classList.add('selected');
+          }
+            selectedBooth = booth;
+
           ev.stopPropagation();
         });
 
         booth.addEventListener('mousedown', function(ev) {
+          if (!ev.shiftKey && !booth.classList.contains('selected')) {
+            document.querySelectorAll('.booth.selected').forEach(b => b.classList.remove('selected'));
+            booth.classList.add('selected');
+            selectedBooth = booth;
+          }
           const boothRect = booth.getBoundingClientRect();
           const offsetX = (ev.clientX - boothRect.left) / currentZoom;
           const offsetY = (ev.clientY - boothRect.top) / currentZoom;
           const grid = document.getElementById('grid');
           attachThrottledMouseEvents(booth, offsetX, offsetY, grid);
         });
+        
         booth.addEventListener('dblclick', function () {
           editLabel(booth.dataset.index);
         });
@@ -394,7 +573,6 @@
 
       enablePlacement(true);
     }
-
 
     function deleteSelectedBooth() {
       if (selectedBooth) {
@@ -511,15 +689,43 @@
       const booth = Array.from(document.querySelectorAll('.booth')).find(b => b.dataset.index == index);
       if (!booth) return;
 
-      const newLabel = prompt("Enter a new label:", booth.dataset.label || booth.textContent);
-      if (newLabel !== null && newLabel.trim() !== "") {
-        booth.dataset.label = newLabel.trim();
-        booth.textContent = newLabel.trim();
-        updateBoothList();
-        saveHistory();
-      }
+    editingBooth = booth;
+
+      document.getElementById('editLabel').value = booth.dataset.label || booth.textContent;
+      document.getElementById('editType').value = booth.dataset.type;
+
+      document.getElementById('editModal').style.display = 'block';
     }
 
+    function saveBoothEdits() {
+      if (!editingBooth) return;
+
+      const newLabel = document.getElementById('editLabel').value.trim();
+      const newType = document.getElementById('editType').value;
+      const currentType = editingBooth.dataset.type;
+
+      if (newLabel) {
+        editingBooth.dataset.label = newLabel;
+        editingBooth.textContent = newLabel;
+      }
+
+      if (newType !== currentType) {
+        editingBooth.classList.remove(currentType);
+        editingBooth.classList.add(newType);
+        editingBooth.dataset.type = newType;
+      }
+
+      document.getElementById('editModal').style.display = 'none';
+      editingBooth = null;
+      updateBoothList();
+      saveHistory();
+    }
+
+    function closeEditModal() {
+      document.getElementById('editModal').style.display = 'none';
+      editingBooth = null;
+    }
+  
     function updateZoom() {
       currentZoom = parseFloat(document.getElementById('zoomSlider').value);
       const wrapper = document.getElementById('grid-wrapper');
@@ -591,8 +797,12 @@
         booth.dataset.index = data.index;
     
         booth.addEventListener('click', function(ev) {
-          document.querySelectorAll('.booth.selected').forEach(b => b.classList.remove('selected'));
-          booth.classList.add('selected');
+          if (ev.shiftKey) {
+            booth.classList.toggle('selected');
+          } else {
+            document.querySelectorAll('.booth.selected').forEach(b => b.classList.remove('selected'));
+            booth.classList.add('selected');
+          }
           selectedBooth = booth;
           ev.stopPropagation();
         });
@@ -675,51 +885,6 @@
       document.body.removeChild(link);
     }
 
-    document.addEventListener('keydown', function(e) {
-      if (e.key === 'Delete' && selectedBooth) {
-        selectedBooth.remove();
-        selectedBooth = null;
-        updateBoothList();
-        saveHistory();
-      }
-
-      // ✅ Escape key works globally
-    if (e.key === 'Escape') {
-        isPlacing = false;
-        document.querySelectorAll('.quick-size').forEach(btn => btn.classList.remove('active-size'));
-        document.getElementById('multiPlaceToggle').checked = false;
-        document.getElementById('customBoothBtn').classList.remove('active-custom');
-      }
-
-      if (selectedBooth) {
-        const step = cellPx;
-        let x = parseInt(selectedBooth.dataset.translateX || 0);
-        let y = parseInt(selectedBooth.dataset.translateY || 0);
-
-        if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          y -= step;
-        }
-        if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          y += step;
-        }
-        if (e.key === 'ArrowLeft') {
-          e.preventDefault();
-          x -= step;
-        }
-        if (e.key === 'ArrowRight') {
-          e.preventDefault();
-          x += step;
-        }
-
-        selectedBooth.style.transform = `translate(${x}px, ${y}px)`;
-        selectedBooth.dataset.translateX = x;
-        selectedBooth.dataset.translateY = y;
-      }
-    });
-
-
     function scrollToCenter() {
       const container = document.getElementById('grid-container');
       const wrapper = document.getElementById('grid-wrapper');
@@ -751,8 +916,12 @@
 
 
     clone.addEventListener('click', function(ev) {
-      document.querySelectorAll('.booth.selected').forEach(b => b.classList.remove('selected'));
-      clone.classList.add('selected');
+      if (ev.shiftKey) {
+        clone.classList.toggle('selected');
+      } else {
+        document.querySelectorAll('.booth.selected').forEach(b => b.classList.remove('selected'));
+        clone.classList.add('selected');
+      }
       selectedBooth = clone;
       ev.stopPropagation();
     });
@@ -791,18 +960,20 @@
     }
 
     function undoLayout() {
-      if (history.length === 0) return;
-      const current = Array.from(document.querySelectorAll('.booth')).map(b => b.remove());
-      const previous = history.pop();
-      redoStack.push(previous);
+      if (history.length < 2) return; // Need at least 2 to go back
+
+      const current = history.pop();         // Remove current
+      redoStack.push(current);               // Save to redo
+      const previous = history[history.length - 1];  // Peek previous
       restoreLayout(previous);
     }
 
     function redoLayout() {
       if (redoStack.length === 0) return;
-      const redoState = redoStack.pop();
-      history.push(redoState);
-      restoreLayout(redoState);
+
+      const next = redoStack.pop();          // Redo state
+      history.push(next);                    // Put it back into history
+      restoreLayout(next);
     }
 
     function restoreLayout(layout) {
@@ -818,7 +989,9 @@
         booth.style.transform = `translate(${data.translateX}px, ${data.translateY}px) rotate(${data.rotation}deg)`;
         booth.style.width = data.width;
         booth.style.height = data.height;
-        booth.textContent = data.label;
+        const w = parseInt(data.width) / cellPx * cellSizeFt;
+        const h = parseInt(data.height) / cellPx * cellSizeFt;
+        booth.textContent = data.label && data.label.trim() !== "" ? data.label : `${w}x${h}`;
         booth.setAttribute('tabindex', 0);
         booth.dataset.rotation = data.rotation;
         booth.dataset.label = data.label;
@@ -826,8 +999,12 @@
         booth.dataset.index = data.index;
 
         booth.addEventListener('click', function(ev) {
-          document.querySelectorAll('.booth.selected').forEach(b => b.classList.remove('selected'));
-          booth.classList.add('selected');
+          if (ev.shiftKey) {
+            booth.classList.toggle('selected');
+          } else {
+            document.querySelectorAll('.booth.selected').forEach(b => b.classList.remove('selected'));
+            booth.classList.add('selected');
+          }
           selectedBooth = booth;
           ev.stopPropagation();
         });
