@@ -47,6 +47,7 @@
     .Stage { background: rgba(255, 0, 128, 0.5); }
     .Food { background: rgba(255, 230, 0, 0.5); }
     .Photo { background: rgba(153, 102, 255, 0.5); }
+    .Other { background: rgba(255, 255, 255, 0.8); }
 
     label, input, select, button { display: block; margin-bottom: 10px; width: 100%; }
     .booth {
@@ -117,6 +118,21 @@
       z-index: 9999;
       pointer-events: none;
     }
+    .text-label {
+      position: absolute;
+      background: #ffe680;
+      border: 1px solid #999;
+      padding: 4px 8px;
+      font-size: 12px;
+      cursor: move;
+      user-select: text;
+      z-index: 5000;
+      min-width: 40px;
+      min-height: 20px;
+    }
+    .text-label.selected {
+      outline: 2px dashed red;
+    }
   </style>
 </head>
 <body>
@@ -161,6 +177,7 @@
         <option value="Stage">Stage</option>
         <option value="Food">Food</option>
         <option value="Photo">Photo Op</option>
+        <option value="Other">Other</option>
       </select>
     </label>
     <label>Label: <input type="text" id="boothLabel" placeholder="e.g. Vendor A1"></label>
@@ -179,6 +196,7 @@
     <div style="display: flex; justify-content: space-between; gap: 5px; margin-top: 10px;">
       <button onclick="undoLayout()" style="width: 48%;">Undo</button>
       <button onclick="redoLayout()" style="width: 48%;">Redo</button>
+      <button onclick="placeTextLabel()" style="margin-bottom: 10px;">📍 Place Text Label</button>
     </div>
     <hr>
     <label>Zoom:
@@ -217,6 +235,7 @@
       <option value="Stage">Stage</option>
       <option value="Food">Food</option>
       <option value="Photo">Photo</option>
+      <option value="Other">Other</option>
     </select>
 
     <div style="display: flex; justify-content: space-between;">
@@ -341,11 +360,18 @@
     });
 
     document.addEventListener('keydown', function(e) {
-      if (e.key === 'Delete' && selectedBooth) {
-        selectedBooth.remove();
-        selectedBooth = null;
-        updateBoothList();
-        saveHistory();
+      if (e.key === 'Delete') {
+        if (selectedBooth) {
+          selectedBooth.remove();
+          selectedBooth = null;
+          updateBoothList();
+          saveHistory();
+        } else {
+          const selectedLabel = document.querySelector('.text-label.selected');
+          if (selectedLabel) {
+            selectedLabel.remove();
+          }
+        }
       }
 
       // ✅ Escape key works globally
@@ -1048,6 +1074,79 @@
     function stopResize() {
       document.removeEventListener('mousemove', resizeSidebar);
       document.removeEventListener('mouseup', stopResize);
+    }
+
+    function placeTextLabel() {
+      const grid = document.getElementById('grid');
+
+      grid.onclick = function(e) {
+        if (!e.target.classList.contains('cell')) return;
+
+        const rect = grid.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / currentZoom;
+        const y = (e.clientY - rect.top) / currentZoom;
+        const left = Math.round(x / cellPx) * cellPx;
+        const top = Math.round(y / cellPx) * cellPx;
+
+        const label = prompt("Enter label text (e.g., 'Entrance', 'Restroom', etc.):");
+        if (!label) return;
+
+        const textBox = document.createElement('div');
+        textBox.className = 'text-label';
+        textBox.style.position = 'absolute';
+        textBox.style.left = left + 'px';
+        textBox.style.top = top + 'px';
+        textBox.style.padding = '4px 8px';
+        textBox.style.background = '#ffe680';
+        textBox.style.border = '1px solid #999';
+        textBox.style.fontSize = '12px';
+        textBox.style.cursor = 'move';
+        textBox.style.zIndex = 5000;
+        textBox.contentEditable = true;
+        textBox.innerText = label;
+
+        // ✅ Enable click-to-select
+        textBox.addEventListener('click', function(ev) {
+          document.querySelectorAll('.text-label.selected').forEach(el => el.classList.remove('selected'));
+          textBox.classList.add('selected');
+          selectedBooth = null; // prevent conflict with booth delete
+          ev.stopPropagation();
+        });
+
+        // ✅ Enable drag movement
+        let offsetX = 0, offsetY = 0;
+        textBox.addEventListener('mousedown', function(ev) {
+          const boxRect = textBox.getBoundingClientRect();
+          offsetX = (ev.clientX - boxRect.left) / currentZoom;
+          offsetY = (ev.clientY - boxRect.top) / currentZoom;
+          attachTextMoveEvents(textBox, offsetX, offsetY);
+        });
+
+        grid.appendChild(textBox);
+        grid.onclick = null; // exit placement mode
+      };
+    }
+
+
+    function attachTextMoveEvents(el, offsetX, offsetY) {
+      const grid = document.getElementById('grid');
+      function move(ev) {
+        const rect = grid.getBoundingClientRect();
+        const x = (ev.clientX - rect.left) / currentZoom - offsetX;
+        const y = (ev.clientY - rect.top) / currentZoom - offsetY;
+        const snappedX = Math.round(x / cellPx) * cellPx;
+        const snappedY = Math.round(y / cellPx) * cellPx;
+        el.style.left = snappedX + 'px';
+        el.style.top = snappedY + 'px';
+      }
+
+      function stop() {
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', stop);
+      }
+
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', stop);
     }
 
 </script>
