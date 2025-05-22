@@ -794,14 +794,28 @@
         type: booth.dataset.type || '',
         index: booth.dataset.index || ''
       }));
-      localStorage.setItem('cosplayLayout', JSON.stringify(booths));
-      alert('Layout saved!');
+
+      const labels = Array.from(document.querySelectorAll('.text-label')).map(label => ({
+        left: parseInt(label.style.left),
+        top: parseInt(label.style.top),
+        text: label.innerText
+      }));
+
+      const layoutData = {
+        booths,
+        labels
+      };
+
+      localStorage.setItem('cosplayLayout', JSON.stringify(layoutData));
+        alert('Layout saved!');
     }
 
     function loadLayout() {
       const saved = localStorage.getItem('cosplayLayout');
       if (!saved) return alert('No saved layout found.');
-      const booths = JSON.parse(saved);
+      const data = JSON.parse(saved);
+      const booths = data.booths || [];
+      const labels = data.labels || [];
 
       const grid = document.getElementById('grid');
       grid.innerHTML = ''; // Clear current layout
@@ -848,7 +862,7 @@
         grid.appendChild(booth);
       });
 
-      updateBoothList();
+      updateBoothList();;
     }
 
     function exportToPDF() {
@@ -859,7 +873,12 @@
 
       const jsPDF = window.jspdf.jsPDF;
 
-      html2canvas(document.getElementById('grid-wrapper')).then(canvas => {
+      const gridWrapper = document.getElementById('grid-wrapper');
+      const originalZoom = currentZoom;
+      document.getElementById('zoomSlider').value = 1;
+      updateZoom();
+
+      html2canvas(gridWrapper, { scale: 2 }).then(canvas => {
         const imgData = canvas.toDataURL('image/png');
         const pdf = new jsPDF({
           orientation: 'landscape',
@@ -869,6 +888,7 @@
 
         pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
         pdf.save('layout.pdf');
+      updateZoom(); // restore zoom level
       }).catch(err => {
         console.error('html2canvas error:', err);
         alert('Failed to export layout. See console for details.');
@@ -887,8 +907,8 @@
 
         const widthPx = parseInt(booth.style.width);
         const heightPx = parseInt(booth.style.height);
-        const xPx = parseInt(booth.style.left);
-        const yPx = parseInt(booth.style.top);
+        const xPx = parseInt(booth.dataset.translateX || 0);
+        const yPx = parseInt(booth.dataset.translateY || 0););
 
         const widthFt = (widthPx / cellPx) * cellSizeFt;
         const heightFt = (heightPx / cellPx) * cellSizeFt;
